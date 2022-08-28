@@ -1,48 +1,32 @@
 import random as rd
+import asyncio
 
-from environs import Env
-from datetime import datetime
-from typing   import Dict
-from config   import LOG1, LOG2, Colors
+from datetime           import datetime
+from typing             import Dict
 
-from telegram.ext import Updater, MessageHandler, CommandHandler, Filters
+from telegram.ext       import Updater, MessageHandler, CommandHandler, Filters
+from telethon           import TelegramClient
 
+from helpers.classes    import ChatMember, SpamWords
+from helpers.constants  import Constants
+from helpers.sql_funcs  import safety_chat_creating, get_or_create_user, safety_chat_deleting
+from helpers.stdlib     import LOG1, LOG2, LOGN, NEW_LINE, Colors
 
-class ChatMember:
-    def __init__(self, user_id: int, chat: int, join_time: datetime, check_answer: int, del_messages: list = None):
-        self.id             = user_id
-        self.chat           = chat
-        self.join_time      = join_time
-        self.answer         = check_answer
-        self.tries          = TRIES
-        self.msg_for_delete = del_messages or []
+from db                 import db_session
 
-    def __str__(self):
-        return f"User({self.id}) in chat '{self.chat}', joined {self.join_time}. "  \
-               f"Check answer: {self.answer} (tries left: {self.tries}). "          \
-               f"Delete messages({len(self.msg_for_delete)}): {[message.text[:10] for message in self.msg_for_delete]}"
+from db.models.chat     import Chat
+from db.models.user     import User
 
-    def __repr__(self):
-        return self.__str__()
-
-    def add_message(self, message):
-        self.msg_for_delete.append(message)
-
-
-env = Env()
-env.read_env()
-
-# ======================================== CONSTANTS ========================================
-TOKEN           = env.str("BOT_TOKEN")
-CHECK_TIME      = 60
-TRIES           = 3
-SPAM_KEYWORDS   = ["Купить", "Продать"]
-# ===========================================================================================
 
 # ======================================= INIT VALUES =======================================
-updater    = Updater(TOKEN, use_context=True)
-dispather  = updater.dispatcher
-job_queue  = updater.job_queue
+updater         = Updater(Constants.TOKEN, use_context=True)
+dispather       = updater.dispatcher
+job_queue       = updater.job_queue
+
+client = TelegramClient("test/session", Constants.API_ID, Constants.API_HASH)
+client.start()
+
+loop   = asyncio.get_event_loop()
 
 check_users: Dict[int, ChatMember] = {}
 # ===========================================================================================
@@ -50,22 +34,44 @@ check_users: Dict[int, ChatMember] = {}
 
 # ======================================== Handlers =========================================
 def new_member(update, _):
-    LOG1("New member detected", color=Colors.BLUE)
+    LOG1(f"{len(update.message.new_chat_members)} new members detected", color=Colors.BLUE)
+    LOG2(f"{NEW_LINE.join(map(str, update.message.new_chat_members))}")
     LOG2("Update message: ", update)
 
-    first, second = rd.randint(1, 9), rd.randint(1, 9)
-    check_users[update.message.from_user.id] = ChatMember(update.message.from_user.id, update.message.chat.id,
-                                                          datetime.now(), first + second, [update.message])
-    LOG1("New user info:", check_users, sep="\n", color=Colors.BLUE)
+    for user in update.message.new_chat_members:
+        if user.id == Constants.BOT_ID:
+            LOG1("\nDetected adding bot to chat", color=Colors.BLUE)
+            return add_tracked_chat(update)
 
-    message = update.message.reply_text(
-        f"Приветствую в чате! Чтобы остаться в нем, подтвердите, что вы не бот.\n\n"
-        f"Для этого в течении {CHECK_TIME} сек. отправьте в чат решение задачи ниже:\n\n"
-        f"{first} + {second} = ?"
-    )
-    check_users[update.message.from_user.id].add_message(message)
+        first, second = rd.randint(1, 9), rd.randint(1, 9)
+        check_users[user.id] = ChatMember(
+            user.id,        user.username,  update.message.chat.id,
+            datetime.now(), first + second, [update.message]
+        )
+        LOG1("New user info:", check_users, sep="\n", color=Colors.BLUE)
 
-    job_queue.run_once(force_delete, CHECK_TIME)
+        message = update.message.reply_text(
+            f"@{user.username}, приветствую в чате! Чтобы остаться в нем, подтвердите, что вы не бот.\n\n"
+            f"Для этого в течении {Constants.CHECK_TIME} сек. отправьте в чат решение задачи ниже:\n\n"
+            f"{first} + {second} = ?"
+        )
+        check_users[user.id].add_message(message)
+
+        job_queue.run_once(force_delete, Constants.CHECK_TIME)
+
+
+def left_member(update, _):
+    LOG2("Member left event:", update, color=Colors.GRAY)
+
+    member = update.message.left_chat_member
+    if member.id != Constants.BOT_ID:
+        return
+
+    session = db_session.create_session()
+
+    LOG1(f"Bot deleted from chat '{update.message.chat.title}'({update.message.chat.id})", color=Colors.RED)
+    del_result = safety_chat_deleting(session, update.message.chat.id)
+    LOG1("Successfully deleted" if del_result else "End of left_member function")
 
 
 def check(update, context):
@@ -74,8 +80,9 @@ def check(update, context):
 
     if from_user.id not in check_users:
         check_spam_messages(update, context)
+        return
 
-    LOG1("Got message from checked user: ", text, color=Colors.GREEN)
+    LOG1(f"Got message from checked user (@{from_user.nickname} - {from_user.id}):", text, color=Colors.GREEN)
     user = check_users[from_user.id]
     user.add_message(update.message)
 
@@ -97,8 +104,20 @@ def check(update, context):
     cleanup_check_messages(from_user.id)
 
 
-def check_spam_messages(update, context):
-    pass
+def check_spam_messages(update, _):
+    LOG2("Checking message for spam", color=Colors.GRAY)
+    LOGN("Message:", update.message.text, color=Colors.GRAY, level=3)
+
+    spam_words = SpamWords(Constants.SPAM_KEYWORDS).check_spam_message(update.message.text)
+    if not spam_words:
+        return
+
+    LOG1(f"Spam detected! Spam words: {spam_words}", color=Colors.RED)
+
+    update.message.delete()
+    #  TODO
+    #  context.bot.send_message(update.message.chat.id, text=f"Пользователь @{update.message.from_user.username}, БАН!")
+
 # ===========================================================================================
 
 
@@ -123,7 +142,7 @@ def force_delete(context):
         timedelta = datetime.now() - args.join_time
         LOG1("Time's up: ", timedelta.total_seconds(), color=Colors.RED)
 
-        if timedelta.total_seconds() >= CHECK_TIME:
+        if timedelta.total_seconds() >= Constants.CHECK_TIME:
             delete_user(args.chat, user_id, context)
             break
 
@@ -131,13 +150,46 @@ def force_delete(context):
 def check_bot(update, _):
     LOG1("Check request: successful", color=Colors.GREEN)
     update.message.delete()
+
+
+def add_tracked_chat(update):
+    chat_id = update.message.chat.id
+
+    LOG1(f"Add new chat ({chat_id}) for bot", color=Colors.ORANGE)
+    session = db_session.create_session()
+
+    new_chat = safety_chat_creating(session, chat_id, update.message.chat.title)
+
+    chat_members = loop.run_until_complete(get_members(chat_id))
+    for user in chat_members:
+        user_in_db = get_or_create_user(session, user.id, user.username)
+        if user_in_db not in new_chat.users:
+            new_chat.users.append(user_in_db)
+
+    session.add(new_chat)
+    session.commit()
+
+    LOG1(f"Added {len(chat_members)} users in db for chat ({chat_id})", color=Colors.ORANGE)
 # ===========================================================================================
 
 
+async def get_members(chat_id):
+    all_members = []
+
+    async with client:
+        async for user in client.iter_participants(chat_id):
+            all_members.append(user)
+
+    return all_members
+
+
 def main():
+    db_session.global_init("db/base.db")
+
     dispather.add_handler(CommandHandler("check",                                check_bot))
-    dispather.add_handler(MessageHandler(Filters.status_update.new_chat_members, new_member, pass_job_queue=True))
-    dispather.add_handler(MessageHandler(Filters.text,                           check,      pass_job_queue=True))
+    dispather.add_handler(MessageHandler(Filters.status_update.new_chat_members, new_member,    pass_job_queue=True))
+    dispather.add_handler(MessageHandler(Filters.status_update.left_chat_member, left_member,   pass_job_queue=True))
+    dispather.add_handler(MessageHandler(Filters.text,                           check,         pass_job_queue=True))
 
     LOG1("Bot start working", color=Colors.GREEN)
 

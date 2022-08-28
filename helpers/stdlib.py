@@ -1,6 +1,7 @@
 from datetime import datetime
 
 DEBUG_LEVEL = 3
+NEW_LINE    = "\n"
 
 
 class Colors:
@@ -16,17 +17,17 @@ class Colors:
     NATURAL = "\033[0m"
 
     SWAPS   = {
-        BLACK:   "<span style='color:black'>",
-        RED:     "<span style='color:red'>",
-        GREEN:   "<span style='color:green'>",
-        ORANGE:  "<span style='color:orange'>",
-        BLUE:    "<span style='color:blue'>",
-        PURPLE:  "<span style='color:purple'>",
-        CYAN:    "<span style='color:cyan'>",
-        GRAY:    "<span style='color:gray'>",
+        BLACK:      "<span style='color:black'>",
+        RED:        "<span style='color:red'>",
+        GREEN:      "<span style='color:green'>",
+        ORANGE:     "<span style='color:orange'>",
+        BLUE:       "<span style='color:blue'>",
+        PURPLE:     "<span style='color:purple'>",
+        CYAN:       "<span style='color:cyan'>",
+        GRAY:       "<span style='color:gray'>",
 
-        NATURAL: "</span>",
-        "\n":    "<br>"
+        NATURAL:    "</span>",
+        NEW_LINE:   "<br>"
     }
 
 
