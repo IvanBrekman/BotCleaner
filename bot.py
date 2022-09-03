@@ -9,7 +9,7 @@ from telethon           import TelegramClient
 
 from helpers.classes    import ChatMember, SpamWords
 from helpers.constants  import Constants
-from helpers.sql_funcs  import safety_chat_creating, get_or_create_user, safety_chat_deleting
+from helpers.sql_funcs  import safety_chat_creating, get_or_create_user, safety_chat_deleting, get_association_object
 from helpers.stdlib     import LOG1, LOG2, LOGN, NEW_LINE, Colors
 
 from db                 import db_session
@@ -23,7 +23,7 @@ updater         = Updater(Constants.TOKEN, use_context=True)
 dispather       = updater.dispatcher
 job_queue       = updater.job_queue
 
-client = TelegramClient("test/session", Constants.API_ID, Constants.API_HASH)
+client = TelegramClient("db/telegramClient", Constants.API_ID, Constants.API_HASH)
 client.start()
 
 loop   = asyncio.get_event_loop()
@@ -44,8 +44,9 @@ def new_member(update, _):
             return add_tracked_chat(update)
 
         first, second = rd.randint(1, 9), rd.randint(1, 9)
+        name = user.username or user.first_name
         check_users[user.id] = ChatMember(
-            user.id,        user.username,  update.message.chat.id,
+            user.id,        name,           update.message.chat.id,
             datetime.now(), first + second, [update.message]
         )
         LOG1("New user info:", check_users, sep="\n", color=Colors.BLUE)
@@ -82,7 +83,8 @@ def check(update, context):
         check_spam_messages(update, context)
         return
 
-    LOG1(f"Got message from checked user (@{from_user.nickname} - {from_user.id}):", text, color=Colors.GREEN)
+    LOG1(f"Got message from checked user (@{from_user.username or from_user.first_name} - {from_user.id}):", text,
+         color=Colors.GREEN)
     user = check_users[from_user.id]
     user.add_message(update.message)
 
@@ -90,6 +92,15 @@ def check(update, context):
         res = int(text)
         if res != user.answer:
             raise ValueError
+
+        session = db_session.create_session()
+
+        chat = session.query(Chat).get(update.message.chat.id)
+        user = get_or_create_user(session, from_user.id, from_user.username or from_user.first_name)
+
+        chat.users.append(user)
+
+        session.commit()
     except ValueError:
         message = update.message.reply_text("Неверно!")
 
@@ -104,7 +115,7 @@ def check(update, context):
     cleanup_check_messages(from_user.id)
 
 
-def check_spam_messages(update, _):
+def check_spam_messages(update, context):
     LOG2("Checking message for spam", color=Colors.GRAY)
     LOGN("Message:", update.message.text, color=Colors.GRAY, level=3)
 
@@ -115,9 +126,21 @@ def check_spam_messages(update, _):
     LOG1(f"Spam detected! Spam words: {spam_words}", color=Colors.RED)
 
     update.message.delete()
-    #  TODO
-    #  context.bot.send_message(update.message.chat.id, text=f"Пользователь @{update.message.from_user.username}, БАН!")
 
+    session = db_session.create_session()
+
+    ass_obj = get_association_object(session, update.message.chat.id, update.message.from_user.id)
+    ass_obj.fines += 1
+
+    if ass_obj.fines >= Constants.FINES_LIMIT:
+        LOG1(f"User @{ass_obj.user.name}({ass_obj.user.id}) fines exceeded LIMIT ({Constants.FINES_LIMIT})",
+             Colors.RED)
+        delete_user(update.message.chat.id, update.message.from_user.id, context)
+
+    session.commit()
+
+    context.bot.send_message(update.message.chat.id, text=f"Пользователь @{ass_obj.user.name}, "
+                                                          f"ваше сообщение было помечено как спам и удалено.")
 # ===========================================================================================
 
 
@@ -131,6 +154,10 @@ def delete_user(chat_id, user_id, context):
 
 def cleanup_check_messages(user_id):
     LOG1(f"Cleanup check messages for user ({user_id})\n", check_users, color=Colors.ORANGE)
+
+    if user_id not in check_users:
+        return
+
     for message in check_users[user_id].msg_for_delete:
         message.delete()
 
@@ -162,7 +189,8 @@ def add_tracked_chat(update):
 
     chat_members = loop.run_until_complete(get_members(chat_id))
     for user in chat_members:
-        user_in_db = get_or_create_user(session, user.id, user.username)
+        user_in_db = get_or_create_user(session, user.id, user.username or user.first_name)
+
         if user_in_db not in new_chat.users:
             new_chat.users.append(user_in_db)
 

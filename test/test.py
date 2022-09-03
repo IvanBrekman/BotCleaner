@@ -1,24 +1,36 @@
-from telethon import TelegramClient
-import asyncio
+import sys
+sys.path.insert(0, "C:\\Users\\nikit\\PycharmProjects\\pythonProject")
 
-api_id = 17467734
-api_hash = '267e6ccae90d26d7d02ac689976e7961'
-session_name = 'test/test'
+from db import db_session
 
-client = TelegramClient(session_name, api_id, api_hash)
-client.start()
+from db.models.chat import Chat, ChatUserAssociation
+from db.models.user import User
 
-loop = asyncio.get_event_loop()
-get_users = lambda chat_id: loop.run_until_complete(get_members(chat_id))
+db_session.global_init("../db/base.db")
 
+session = db_session.create_session()
 
-async def get_members(chat_id):
-    all_members = []
+# chat = Chat(id=100, name="chat")
+#
+# user1 = User(id=1, name="name1")
+# user2 = User(id=2, name="name2")
+# user3 = User(id=3, name="name3")
+#
+# chat.users.extend([user1, user2, user3])
+#
+# session.add(chat)
+# session.commit()
 
-    async with client:
-        async for user in client.iter_participants(chat_id):
-            all_members.append(user)
+chat = session.query(Chat).get(1)
+user = session.query(User).get(2)
 
-    return all_members
+ass_obj = session.query(ChatUserAssociation).filter_by(user_id=user.id, chat_id=chat.id).first()
+ass_obj.fines += 1
 
-print(get_users(-711319459))
+session.commit()
+print(ass_obj.fines)
+
+user = session.query(Chat).get(1)
+
+session.delete(user)
+session.commit()

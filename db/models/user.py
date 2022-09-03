@@ -1,18 +1,17 @@
 import sqlalchemy
 
-from sqlalchemy   import orm
-from ..db_session import SqlAlchemyBase
+from sqlalchemy                         import orm
+from sqlalchemy.ext.associationproxy    import association_proxy
 
-from .chat import association_table
+from ..db_session import SqlAlchemyBase
 
 
 class User(SqlAlchemyBase):
-
     __tablename__ = "users"
 
-    id      = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
-    user_id = sqlalchemy.Column(sqlalchemy.Integer, nullable=False,   unique=True)
+    id      = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)
     name    = sqlalchemy.Column(sqlalchemy.String,  nullable=False)
 
-    chats   = orm.relationship("Chat", secondary=association_table, back_populates="users", lazy="dynamic")
+    chat_user_associations = orm.relationship("ChatUserAssociation", back_populates="user", cascade="all, delete-orphan")
 
+    chats   = association_proxy("chat_user_associations", "chat")
