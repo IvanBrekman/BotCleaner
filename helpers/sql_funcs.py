@@ -6,6 +6,19 @@ from db.models.user import User
 from .stdlib import LOG2, Colors
 
 
+def get_or_create_chat(session: Session, chat_id: int, title: str):
+    chat = session.query(Chat).get(chat_id)
+    if chat is not None:
+        return chat
+
+    new_chat = Chat(id=chat_id, name=title)
+
+    session.add(new_chat)
+    session.commit()
+
+    return new_chat
+
+
 def safety_chat_creating(session: Session, chat_id: int, chat_title: str):
     chat = session.query(Chat).get(chat_id)
     if chat is not None:

@@ -1,15 +1,14 @@
 import random as rd
-import asyncio
 
 from datetime           import datetime
 from typing             import Dict
 
 from telegram.ext       import Updater, MessageHandler, CommandHandler, Filters
-from telethon           import TelegramClient
 
 from helpers.classes    import ChatMember, SpamWords
 from helpers.constants  import Constants
-from helpers.sql_funcs  import safety_chat_creating, get_or_create_user, safety_chat_deleting, get_association_object
+from helpers.sql_funcs  import get_or_create_chat, get_or_create_user, safety_chat_creating, safety_chat_deleting,\
+                               get_association_object
 from helpers.stdlib     import LOG1, LOG2, LOGN, NEW_LINE, Colors
 
 from db                 import db_session
@@ -22,11 +21,6 @@ from db.models.user     import User
 updater         = Updater(Constants.TOKEN, use_context=True)
 dispather       = updater.dispatcher
 job_queue       = updater.job_queue
-
-client = TelegramClient("db/telegramClient", Constants.API_ID, Constants.API_HASH)
-client.start()
-
-loop   = asyncio.get_event_loop()
 
 check_users: Dict[int, ChatMember] = {}
 # ===========================================================================================
@@ -127,9 +121,21 @@ def check_spam_messages(update, context):
 
     update.message.delete()
 
+    from_user = update.message.from_user
+
     session = db_session.create_session()
 
-    ass_obj = get_association_object(session, update.message.chat.id, update.message.from_user.id)
+    ass_obj = get_association_object(session, update.message.chat.id, from_user.id)
+    if ass_obj is None:
+        chat = get_or_create_chat(session, update.message.chat.id, update.message.chat.title)
+
+        user = get_or_create_user(session, from_user.id, from_user.username or from_user.first_name)
+        chat.users.append(user)
+
+        session.commit()
+        ass_obj = get_association_object(session, update.message.chat.id, from_user.id)
+        assert ass_obj is not None
+
     ass_obj.fines += 1
 
     if ass_obj.fines >= Constants.FINES_LIMIT:
@@ -139,8 +145,9 @@ def check_spam_messages(update, context):
 
     session.commit()
 
-    context.bot.send_message(update.message.chat.id, text=f"Пользователь @{ass_obj.user.name}, "
-                                                          f"ваше сообщение было помечено как спам и удалено.")
+    if Constants.SEND_MSG_ABOUT_SPAM:
+        context.bot.send_message(update.message.chat.id, text=f"Пользователь @{ass_obj.user.name}, "
+                                                              f"ваше сообщение было помечено как спам и удалено.")
 # ===========================================================================================
 
 
@@ -187,28 +194,11 @@ def add_tracked_chat(update):
 
     new_chat = safety_chat_creating(session, chat_id, update.message.chat.title)
 
-    chat_members = loop.run_until_complete(get_members(chat_id))
-    for user in chat_members:
-        user_in_db = get_or_create_user(session, user.id, user.username or user.first_name)
-
-        if user_in_db not in new_chat.users:
-            new_chat.users.append(user_in_db)
-
     session.add(new_chat)
     session.commit()
 
-    LOG1(f"Added {len(chat_members)} users in db for chat ({chat_id})", color=Colors.ORANGE)
+    LOG1(f"Added chat ({chat_id}) in db", color=Colors.ORANGE)
 # ===========================================================================================
-
-
-async def get_members(chat_id):
-    all_members = []
-
-    async with client:
-        async for user in client.iter_participants(chat_id):
-            all_members.append(user)
-
-    return all_members
 
 
 def main():
