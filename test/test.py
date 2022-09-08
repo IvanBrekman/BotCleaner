@@ -2,35 +2,68 @@ import sys
 sys.path.insert(0, "C:\\Users\\nikit\\PycharmProjects\\pythonProject")
 
 from db import db_session
+from db.models.setting import Setting, ChatSettingAssociation
+from db.models.chat import Chat
 
-from db.models.chat import Chat, ChatUserAssociation
-from db.models.user import User
+from environs import Env
 
-db_session.global_init("../db/base.db")
+env = Env()
+env.read_env()
 
-session = db_session.create_session()
 
-# chat = Chat(id=100, name="chat")
-#
-# user1 = User(id=1, name="name1")
-# user2 = User(id=2, name="name2")
-# user3 = User(id=3, name="name3")
-#
-# chat.users.extend([user1, user2, user3])
-#
-# session.add(chat)
-# session.commit()
+def get_constant(chat_id, setting_name):
+    session = db_session.create_session()
 
-chat = session.query(Chat).get(1)
-user = session.query(User).get(2)
+    setting_id = Constants.setting_name_to_id.get(setting_name)
+    if setting_id is None:
+        setting    = session.query(Setting).filter_by(name=setting_name).first()
+        if setting is not None:
+            Constants.setting_name_to_id[setting_name] = setting.id
+        else:
+            raise ValueError(f"No setting with name '{setting_name}'")
+        setting_id = setting.id
 
-ass_obj = session.query(ChatUserAssociation).filter_by(user_id=user.id, chat_id=chat.id).first()
-ass_obj.fines += 1
+    setting = session.query(ChatSettingAssociation).filter_by(chat_id=chat_id, setting_id=setting_id).first()
+    if setting is None:
+        raise ValueError(f"No setting with name '{setting_name}' in chat '{chat_id}'")
 
-session.commit()
-print(ass_obj.fines)
+    return setting.value
 
-user = session.query(Chat).get(1)
 
-session.delete(user)
-session.commit()
+def fixed_setting(name, setting_type):
+    namespace = {'env': env}
+
+    exec(f"value = env.{setting_type.__name__}('{name}')", namespace)
+
+    return lambda _: namespace.get("value")
+
+
+class Constants:
+    setting_name_to_id = {}
+
+    BOT_TOKEN   = fixed_setting("BOT_TOKEN", str)
+    BOT_ID      = fixed_setting("BOT_ID",    int)
+    API_ID      = fixed_setting("API_ID",    int)
+    API_HASH    = fixed_setting("API_HASH",  str)
+
+    CHECK_TIME          = None
+    TRIES_FOR_ANSWER    = None
+    FINES_LIMIT         = None
+    SPAM_WORDS          = None
+    SEND_MSG_ABOUT_SPAM = None
+    UPD_TIME_DELAY_SEC  = None
+
+    @staticmethod
+    def init():
+        session  = db_session.create_session()
+        settings = session.query(Setting).all()
+
+        for setting in settings:
+            Constants.setting_name_to_id[setting.name] = setting.id
+            exec(f"Constants.{setting.name} = lambda chat_id: get_constant(chat_id, '{setting.name}')")
+
+
+if __name__ == '__main__':
+    db_session.global_init("../db/base.db")
+
+    Constants.init()

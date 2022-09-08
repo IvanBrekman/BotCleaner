@@ -29,6 +29,8 @@ class Chat(SqlAlchemyBase):
     id      = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)
     name    = sqlalchemy.Column(sqlalchemy.String,  nullable=False)
 
-    chat_user_associations = orm.relationship("ChatUserAssociation", back_populates="chat", cascade="all, delete-orphan")
+    chat_user_associations    = orm.relationship("ChatUserAssociation",    back_populates="chat", cascade="all, delete-orphan")
+    chat_setting_associations = orm.relationship("ChatSettingAssociation", back_populates="chat", cascade="all, delete-orphan")
 
-    users   = association_proxy("chat_user_associations", "user")
+    users    = association_proxy("chat_user_associations",    "user")
+    settings = association_proxy("chat_setting_associations", "setting")

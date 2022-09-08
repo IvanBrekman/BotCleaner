@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
-DEBUG_LEVEL = 3
+DEBUG_LEVEL = 4
 NEW_LINE    = "\n"
 
 
@@ -31,7 +31,7 @@ class Colors:
     }
 
 
-def LOGN(*args, level=0, **kwargs):
+def LOGN(*args, level, **kwargs) -> None:
     assert isinstance(level, int), f"level: ({level}) is not integer"
     assert -1 <= level <= 9,        f"level value should be 0..9, got ({level})"
 
@@ -39,7 +39,7 @@ def LOGN(*args, level=0, **kwargs):
         print(Colors.RED, "!!! ATTENTION !!!", Colors.NATURAL, sep="")
 
     color    = Colors.CYAN if level == 1 else Colors.ORANGE if level == 2 else ""
-    log_time = f"({level if level != -1 else 'e'})[{datetime.now().strftime('%d.%m.%Y %H:%M:%S.%f')}]"
+    log_time = f"({level if level != -1 else 'e'})[{date_to_str(utc_to_local(datetime.utcnow()))}]"
 
     if DEBUG_LEVEL >= level:
         print(color + log_time + (Colors.NATURAL if level in (1, 2) else ""), end=" ")
@@ -68,9 +68,17 @@ def LOGN(*args, level=0, **kwargs):
         print(Colors.RED, "!!! ATTENTION !!!", Colors.NATURAL, sep="")
 
 
-def LOG1(*args, **kwargs):
+def LOG1(*args, **kwargs) -> None:
     LOGN(level=1, *args, **kwargs)
 
 
-def LOG2(*args, **kwargs):
+def LOG2(*args, **kwargs) -> None:
     LOGN(level=2, *args, **kwargs)
+
+
+def utc_to_local(utc_dt: datetime) -> datetime:
+    return utc_dt.replace(tzinfo=timezone.utc).astimezone(tz=None).replace(tzinfo=None)
+
+
+def date_to_str(date: datetime, format_="%d.%m.%Y %H:%M:%S.%f"):
+    return date.strftime(format_)

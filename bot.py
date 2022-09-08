@@ -7,18 +7,16 @@ from telegram.ext       import Updater, MessageHandler, CommandHandler, Filters
 
 from helpers.classes    import ChatMember, SpamWords
 from helpers.constants  import Constants
+from helpers.decorators import log_handler, check_bot_env_in_chats, private_chat_required
 from helpers.sql_funcs  import get_or_create_chat, get_or_create_user, safety_chat_creating, safety_chat_deleting,\
                                get_association_object
 from helpers.stdlib     import LOG1, LOG2, LOGN, NEW_LINE, Colors
 
 from db                 import db_session
 
-from db.models.chat     import Chat
-from db.models.user     import User
-
 
 # ======================================= INIT VALUES =======================================
-updater         = Updater(Constants.TOKEN, use_context=True)
+updater         = Updater(Constants.BOT_TOKEN__, use_context=True)
 dispather       = updater.dispatcher
 job_queue       = updater.job_queue
 
@@ -27,13 +25,15 @@ check_users: Dict[int, ChatMember] = {}
 
 
 # ======================================== Handlers =========================================
+@log_handler
+@check_bot_env_in_chats(check_admin_status=False)
 def new_member(update, _):
     LOG1(f"{len(update.message.new_chat_members)} new members detected", color=Colors.BLUE)
     LOG2(f"{NEW_LINE.join(map(str, update.message.new_chat_members))}")
     LOG2("Update message: ", update)
 
     for user in update.message.new_chat_members:
-        if user.id == Constants.BOT_ID:
+        if user.id == Constants.BOT_ID__:
             LOG1("\nDetected adding bot to chat", color=Colors.BLUE)
             return add_tracked_chat(update)
 
@@ -47,19 +47,21 @@ def new_member(update, _):
 
         message = update.message.reply_text(
             f"@{user.username}, приветствую в чате! Чтобы остаться в нем, подтвердите, что вы не бот.\n\n"
-            f"Для этого в течении {Constants.CHECK_TIME} сек. отправьте в чат решение задачи ниже:\n\n"
+            f"Для этого в течении {Constants.CHECK_TIME(update)} сек. отправьте в чат решение задачи ниже:\n\n"
             f"{first} + {second} = ?"
         )
         check_users[user.id].add_message(message)
 
-        job_queue.run_once(force_delete, Constants.CHECK_TIME)
+        job_queue.run_once(lambda context: force_delete(update, context), Constants.CHECK_TIME(update))
 
 
+@log_handler
+@check_bot_env_in_chats()
 def left_member(update, _):
     LOG2("Member left event:", update, color=Colors.GRAY)
 
     member = update.message.left_chat_member
-    if member.id != Constants.BOT_ID:
+    if member.id != Constants.BOT_ID__:
         return
 
     session = db_session.create_session()
@@ -69,6 +71,8 @@ def left_member(update, _):
     LOG1("Successfully deleted" if del_result else "End of left_member function")
 
 
+@log_handler
+@check_bot_env_in_chats()
 def check(update, context):
     text      = update.message.text
     from_user = update.message.from_user
@@ -89,7 +93,7 @@ def check(update, context):
 
         session = db_session.create_session()
 
-        chat = session.query(Chat).get(update.message.chat.id)
+        chat = get_or_create_chat(session, update.message.chat.id, update.message.chat.title)
         user = get_or_create_user(session, from_user.id, from_user.username or from_user.first_name)
 
         chat.users.append(user)
@@ -109,11 +113,13 @@ def check(update, context):
     cleanup_check_messages(from_user.id)
 
 
+@check_bot_env_in_chats()
 def check_spam_messages(update, context):
     LOG2("Checking message for spam", color=Colors.GRAY)
-    LOGN("Message:", update.message.text, color=Colors.GRAY, level=3)
+    LOGN(f"Message:", update.message.text, color=Colors.GRAY, level=3)
+    LOGN("Update:", update, color=Colors.GRAY, level=4)
 
-    spam_words = SpamWords(Constants.SPAM_KEYWORDS).check_spam_message(update.message.text)
+    spam_words = SpamWords(Constants.SPAM_KEYWORDS(update)).check_spam_message(update.message.text)
     if not spam_words:
         return
 
@@ -138,16 +144,35 @@ def check_spam_messages(update, context):
 
     ass_obj.fines += 1
 
-    if ass_obj.fines >= Constants.FINES_LIMIT:
-        LOG1(f"User @{ass_obj.user.name}({ass_obj.user.id}) fines exceeded LIMIT ({Constants.FINES_LIMIT})",
+    if ass_obj.fines >= Constants.FINES_LIMIT(update):
+        LOG1(f"User @{ass_obj.user.name}({ass_obj.user.id}) fines exceeded LIMIT ({Constants.FINES_LIMIT(update)})",
              Colors.RED)
         delete_user(update.message.chat.id, update.message.from_user.id, context)
 
     session.commit()
 
-    if Constants.SEND_MSG_ABOUT_SPAM:
+    if not Constants.SILENCE_IN_CHAT(update):
         context.bot.send_message(update.message.chat.id, text=f"Пользователь @{ass_obj.user.name}, "
                                                               f"ваше сообщение было помечено как спам и удалено.")
+# ===========================================================================================
+
+
+# ===================================  Commands Handlers  ===================================
+@log_handler
+@private_chat_required
+def start_command(update, context):
+    context.bot.send_message(update.message.chat.id, "START")
+
+
+@log_handler
+@private_chat_required
+def help_command(update, context):
+    context.bot.send_message(update.message.chat.id, "HELP")
+
+
+def check_bot(update, _):
+    LOG1("Check request: successful", color=Colors.GREEN)
+    update.message.delete()
 # ===========================================================================================
 
 
@@ -171,19 +196,14 @@ def cleanup_check_messages(user_id):
     check_users.pop(user_id)
 
 
-def force_delete(context):
+def force_delete(update, context):
     for user_id, args in check_users.items():
         timedelta = datetime.now() - args.join_time
         LOG1("Time's up: ", timedelta.total_seconds(), color=Colors.RED)
 
-        if timedelta.total_seconds() >= Constants.CHECK_TIME:
+        if timedelta.total_seconds() >= Constants.CHECK_TIME(update):
             delete_user(args.chat, user_id, context)
             break
-
-
-def check_bot(update, _):
-    LOG1("Check request: successful", color=Colors.GREEN)
-    update.message.delete()
 
 
 def add_tracked_chat(update):
@@ -204,7 +224,12 @@ def add_tracked_chat(update):
 def main():
     db_session.global_init("db/base.db")
 
+    Constants.init()
+
     dispather.add_handler(CommandHandler("check",                                check_bot))
+    dispather.add_handler(CommandHandler("start",                                start_command))
+    dispather.add_handler(CommandHandler("help",                                 help_command))
+
     dispather.add_handler(MessageHandler(Filters.status_update.new_chat_members, new_member,    pass_job_queue=True))
     dispather.add_handler(MessageHandler(Filters.status_update.left_chat_member, left_member,   pass_job_queue=True))
     dispather.add_handler(MessageHandler(Filters.text,                           check,         pass_job_queue=True))

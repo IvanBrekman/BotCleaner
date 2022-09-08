@@ -1,7 +1,8 @@
 from sqlalchemy.orm import Session
 
-from db.models.chat import Chat, ChatUserAssociation
-from db.models.user import User
+from db.models.chat     import Chat, ChatUserAssociation
+from db.models.user     import User
+from db.models.setting  import Setting
 
 from .stdlib import LOG2, Colors
 
@@ -12,6 +13,9 @@ def get_or_create_chat(session: Session, chat_id: int, title: str):
         return chat
 
     new_chat = Chat(id=chat_id, name=title)
+
+    for setting in session.query(Setting).all():
+        new_chat.settings.append(setting)
 
     session.add(new_chat)
     session.commit()

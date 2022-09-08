@@ -13,7 +13,7 @@ class ChatMember:
         self.chat           = chat
         self.join_time      = join_time
         self.answer         = check_answer
-        self.tries          = Constants.TRIES
+        self.tries          = Constants.TRIES_FOR_ANSWER(chat)
         self.msg_for_delete = del_messages or []
 
     def __str__(self):
