@@ -34,3 +34,8 @@ class Setting(SqlAlchemyBase):
     chat_setting_associations = orm.relationship("ChatSettingAssociation", back_populates="setting", cascade="all, delete-orphan")
 
     chats   = association_proxy("chat_setting_associations", "chat")
+
+    def __init__(self, name, type_, default):
+        self.name    = name
+        self.type    = type_
+        self.default = default

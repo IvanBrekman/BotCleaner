@@ -3,6 +3,8 @@ import sqlalchemy.ext.declarative as dec
 
 from sqlalchemy import orm
 
+from helpers.stdlib import LOG2, Colors
+
 
 SqlAlchemyBase = dec.declarative_base()  # Создаем объект базы данных
 
@@ -26,7 +28,7 @@ def global_init(db_file: str, echo=False) -> None:
         raise ValueError("Excepted path to db file, got nothing instead")
 
     conn_str = f"sqlite:///{db_file.strip()}?check_same_thread=False"
-    print(f"Подключение к базе данных по адресу: {conn_str}")
+    LOG2(f"Подключение к базе данных по адресу: {conn_str}", color=Colors.GRAY, skipd=1)
 
     engine    = sqlalchemy.create_engine(conn_str, echo=echo)
     __factory = orm.sessionmaker(bind=engine)

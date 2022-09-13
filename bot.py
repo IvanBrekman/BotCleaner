@@ -27,32 +27,36 @@ check_users: Dict[int, ChatMember] = {}
 # ======================================== Handlers =========================================
 @log_handler
 @check_bot_env_in_chats(check_admin_status=False)
-def new_member(update, _):
+def new_member(update, context):
     LOG1(f"{len(update.message.new_chat_members)} new members detected", color=Colors.BLUE)
     LOG2(f"{NEW_LINE.join(map(str, update.message.new_chat_members))}")
     LOG2("Update message: ", update)
 
     for user in update.message.new_chat_members:
-        if user.id == Constants.BOT_ID__:
+        full_user = context.bot.get_chat_member(update.message.chat.id, user.id)
+        LOG2(f"User:", full_user, color=Colors.CYAN)
+
+        full_user = full_user.user
+
+        if full_user.id == Constants.BOT_ID__:
             LOG1("\nDetected adding bot to chat", color=Colors.BLUE)
             return add_tracked_chat(update)
 
         first, second = rd.randint(1, 9), rd.randint(1, 9)
-        name = user.username or user.first_name
-        check_users[user.id] = ChatMember(
-            user.id,        name,           update.message.chat.id,
-            datetime.now(), first + second, [update.message]
+        check_users[full_user.id] = ChatMember(
+            full_user.id,   full_user.username, update.message.chat.id,
+            datetime.now(), first + second,     [update.message]
         )
         LOG1("New user info:", check_users, sep="\n", color=Colors.BLUE)
 
         message = update.message.reply_text(
-            f"@{user.username}, приветствую в чате! Чтобы остаться в нем, подтвердите, что вы не бот.\n\n"
+            f"@{full_user.username}, приветствую в чате! Чтобы остаться в нем, подтвердите, что вы не бот.\n\n"
             f"Для этого в течении {Constants.CHECK_TIME(update)} сек. отправьте в чат решение задачи ниже:\n\n"
             f"{first} + {second} = ?"
         )
         check_users[user.id].add_message(message)
 
-        job_queue.run_once(lambda context: force_delete(update, context), Constants.CHECK_TIME(update))
+        job_queue.run_once(lambda ctx: force_delete(update, ctx), Constants.CHECK_TIME(update))
 
 
 @log_handler

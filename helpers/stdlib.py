@@ -35,6 +35,11 @@ def LOGN(*args, level, **kwargs) -> None:
     assert isinstance(level, int), f"level: ({level}) is not integer"
     assert -1 <= level <= 9,        f"level value should be 0..9, got ({level})"
 
+    skip, skip_up, skip_down = kwargs.pop("skip", 0), kwargs.pop("skipu", 0), kwargs.pop("skipd", 0)
+    if skip > 0:
+        skip_up = skip_down = skip
+    print("\n" * skip_up, end='')
+
     if level == -1:
         print(Colors.RED, "!!! ATTENTION !!!", Colors.NATURAL, sep="")
 
@@ -60,6 +65,7 @@ def LOGN(*args, level, **kwargs) -> None:
             args[i] = arg.__str__().replace("\n", "\n" + " " * (len(log_time) + 1))
 
         print(*args, **kwargs)
+        print("\n" * skip_down, end='')
 
         if color:
             print(Colors.NATURAL, end="")
@@ -82,3 +88,7 @@ def utc_to_local(utc_dt: datetime) -> datetime:
 
 def date_to_str(date: datetime, format_="%d.%m.%Y %H:%M:%S.%f"):
     return date.strftime(format_)
+
+
+def colored(string: str, color: str) -> str:
+    return f"{color}{string}{Colors.NATURAL}"

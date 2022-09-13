@@ -54,18 +54,18 @@ def log_handler(handler):
     def logger(update, context):
         intro     = f"==================== Handler '{handler.__name__}' start working ===================="
         chat_info = f"Chat '{update.message.chat.title}'({update.message.chat.id})"
-        end_text  = f"==================== Handler '{handler.__name__}' end   working ====================\n"
+        end_text  = f"==================== Handler '{handler.__name__}' end   working ===================="
 
         spaces    = (len(intro) - len(chat_info)) // 2
         spaces    = spaces if spaces > 0 else 0
 
-        LOG1(intro, color=Colors.ORANGE)
+        LOG1(intro, color=Colors.ORANGE, skipu=1)
         LOG1(f"{' ' * spaces}{chat_info}{' ' * spaces}", color=Colors.GRAY)
 
         handler(update, context)
 
         LOG1(f"{' ' * spaces}{chat_info}{' ' * spaces}", color=Colors.GRAY)
-        LOG1(end_text, color=Colors.ORANGE)
+        LOG1(end_text, color=Colors.ORANGE, skipd=1)
 
     return logger
 
