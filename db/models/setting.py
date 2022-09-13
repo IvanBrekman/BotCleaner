@@ -39,3 +39,9 @@ class Setting(SqlAlchemyBase):
         self.name    = name
         self.type    = type_
         self.default = default
+
+    def __str__(self):
+        return f"<Setting({self.type}) - '{self.name}': '{self.default}'>"
+
+    def __repr__(self):
+        return self.__str__()

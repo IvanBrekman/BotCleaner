@@ -90,7 +90,9 @@ class Constants:
         if len(settings) == 0:
             LOG1(f"Settings are not in DB! Loading Settings data from '{Constants.SETTINGS_LOAD_FILE__}'", color=Colors.RED)
             load_settings_to_db()
+            settings = session.query(Setting).all()
 
+        LOG2("Received settings:", settings)
         for setting in settings:
             exec(f"Constants.{setting.name} = lambda chat_id: get_constant(chat_id, '{setting.name}')")
 

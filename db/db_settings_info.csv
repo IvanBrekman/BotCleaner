@@ -1,6 +1,6 @@
 CHECK_TIME;int;60
 TRIES_FOR_ANSWER;int;3
 FINES_LIMIT;int;3
-SPAM_KEYWORDS;list;Купить,Продать
-SILENCE_IN_CHAT;int;0
+SPAM_KEYWORDS;list;Купить,Продать,Покупать,Продавать
+SILENCE_IN_CHAT;int;1
 UPD_TIME_DELAY_SEC;int;5
