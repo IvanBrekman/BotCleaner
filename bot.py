@@ -113,7 +113,7 @@ def check(update, context):
 
         return
 
-    cleanup_check_messages(from_user.id)
+    cleanup_check_messages(from_user.id, True)
 
 
 @check_bot_env_in_chats()
@@ -184,16 +184,16 @@ def delete_user(chat_id, user_id, context):
     LOG1(f"Delete user ({user_id})", color=Colors.RED)
     context.bot.ban_chat_member(chat_id, user_id)
 
-    cleanup_check_messages(user_id)
+    cleanup_check_messages(user_id, False)
 
 
-def cleanup_check_messages(user_id):
+def cleanup_check_messages(user_id, del_first):
     LOG1(f"Cleanup check messages for user ({user_id})\n", check_users, color=Colors.ORANGE)
 
     if user_id not in check_users:
         return
 
-    for message in check_users[user_id].msg_for_delete:
+    for message in check_users[user_id].msg_for_delete[del_first:]:
         message.delete()
 
     check_users.pop(user_id)

@@ -33,7 +33,7 @@ class Colors:
 
 def LOGN(*args, level, **kwargs) -> None:
     assert isinstance(level, int), f"level: ({level}) is not integer"
-    assert -1 <= level <= 9,        f"level value should be 0..9, got ({level})"
+    assert -1 <= level <= 9,        f"level value should be -1..9, got ({level})"
 
     skip, skip_up, skip_down = kwargs.pop("skip", 0), kwargs.pop("skipu", 0), kwargs.pop("skipd", 0)
     if skip > 0:
@@ -63,6 +63,7 @@ def LOGN(*args, level, **kwargs) -> None:
         args = list(args)
         for i, arg in enumerate(args):
             args[i] = arg.__str__().replace("\n", "\n" + " " * (len(log_time) + 1))
+            args[i] = arg.__str__().replace(Colors.NATURAL, Colors.NATURAL + (color or ""))
 
         print(*args, **kwargs)
         print("\n" * skip_down, end='')
@@ -91,4 +92,5 @@ def date_to_str(date: datetime, format_="%d.%m.%Y %H:%M:%S.%f"):
 
 
 def colored(string: str, color: str) -> str:
+    string = string.replace(Colors.NATURAL, Colors.NATURAL + color)
     return f"{color}{string}{Colors.NATURAL}"
