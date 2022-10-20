@@ -31,9 +31,9 @@ class Colors:
     }
 
 
-def LOGN(*args, level, **kwargs) -> None:
+def LOGN(*args, level: int, **kwargs) -> None:
     assert isinstance(level, int), f"level: ({level}) is not integer"
-    assert -1 <= level <= 9,        f"level value should be -1..9, got ({level})"
+    assert -1 <= level <= 9,       f"level value should be -1..9, got ({level})"
 
     skip, skip_up, skip_down = kwargs.pop("skip", 0), kwargs.pop("skipu", 0), kwargs.pop("skipd", 0)
     if skip > 0:
@@ -87,7 +87,7 @@ def utc_to_local(utc_dt: datetime) -> datetime:
     return utc_dt.replace(tzinfo=timezone.utc).astimezone(tz=None).replace(tzinfo=None)
 
 
-def date_to_str(date: datetime, format_="%d.%m.%Y %H:%M:%S.%f"):
+def date_to_str(date: datetime, format_: str = "%d.%m.%Y %H:%M:%S.%f") -> str:
     return date.strftime(format_)
 
 
