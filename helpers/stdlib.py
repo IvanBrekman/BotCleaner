@@ -38,7 +38,7 @@ def LOGN(*args, level: int, **kwargs) -> None:
     skip, skip_up, skip_down = kwargs.pop("skip", 0), kwargs.pop("skipu", 0), kwargs.pop("skipd", 0)
     if skip > 0:
         skip_up = skip_down = skip
-    print("\n" * skip_up, end='')
+    print("\n" * skip_up, end="")
 
     if level == -1:
         print(Colors.RED, "!!! ATTENTION !!!", Colors.NATURAL, sep="")
@@ -66,7 +66,7 @@ def LOGN(*args, level: int, **kwargs) -> None:
             args[i] = arg.__str__().replace(Colors.NATURAL, Colors.NATURAL + (color or ""))
 
         print(*args, **kwargs)
-        print("\n" * skip_down, end='')
+        print("\n" * skip_down, end="")
 
         if color:
             print(Colors.NATURAL, end="")
